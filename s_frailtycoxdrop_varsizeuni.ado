@@ -12,7 +12,7 @@ NCLUSPERGRP(integer)
 	gen frailty=rgamma(1/`icc',`icc')
 	gen hazard=(lambda1+group*(lambda2-lambda1))*frailty
 	gen clusid=_n
-	gen clussize=(runiform()*(`rratemax’-`rratemin’)+`rratemin’)*`rtime’
+	gen clussize=(runiform()*(`rratemax'-`rratemin')+`rratemin')*`rtime'
 	expand clussize
 	sort clusid
 	by clusid: gen time=`ftime'+`rtime'*_n/clussize
