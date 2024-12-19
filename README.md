@@ -8,4 +8,7 @@ click on the "install" link.
 
 The package is described further in an article in the Stata Journal:
 Hooper R. Versatile sample size calculation using simulation. Stata Journal 2013;13(1):21-38
+https://journals.sagepub.com/doi/pdf/10.1177/1536867X1301300103 
 
+This GitHub archive contains the Stata code for simsam that may be saved as a Stata "ado" file, 
+the text of the Stata help file, and two slide presentations on using simsam.
