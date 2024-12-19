@@ -1,0 +1,284 @@
+Title
+
+    simsam -- Sample size by simulation
+
+
+Syntax
+
+        simsam subcommand n_option_name, inc(#) prec(#) [options]
+
+        or
+
+        simsam continue [, inc(#) prec(#) null(options) iter(#) notable]
+
+    options               Description
+    --------------------------------------------------------------------------
+    * inc(#)              increment for sample size
+    * prec(#)             precision of final estimate of power
+      power(#)            required power
+      alpha(#)            required significance level
+      detect(options)     specification of effect to be detected
+      null(options)       specification of null model
+      assuming(options)   additional assumptions
+      start(#)            starting value for sample size
+      iter(#)             maximum number of iterations
+      notable             option for suppressing output table
+      pvalue(name)        where p-value is returned
+      level(#)            confidence level for estimate of power
+    --------------------------------------------------------------------------
+    * inc(#) and prec(#) are required.
+
+
+Description
+
+    simsam uses simulation to determine the sample size required to achieve a
+    given power for any method of analysis under any probability model that
+    can be programmed in Stata.  subcommand is the name of a program
+    containing code to generate and analyze a single dataset.  n_option_name
+    is the name of an option to subcommand that controls the sample size.
+    simsam returns the smallest sample size (or smallest multiple of 5, 10, or
+    some other user-specified increment) so that the estimated power exceeds
+    the target.  The user controls the precision of the power estimate, and
+    power is reported with a confidence interval.  The sample size returned is
+    reliable to the extent that if simsam is repeated, it will nearly every
+    time give a sample size no more than one increment away.
+
+    simsam continue is used to continue where a previous simsam command left
+    off, with the additional option of changing the increment and the
+    precision of the power estimate.
+
+
+Options
+
+    inc(#) specifies the sample-size increment.  simsam returns a sample size
+        that is a multiple of the increment.  This option is required except
+        with simsam continue, where if inc() is not specified, it is assumed
+        to be the same as in the previous simsam command.  inc() must be an
+        integer (simsam will only consider integer values for the sample
+        size).
+
+    prec(#) specifies the precision of the final estimate of power.  This
+        option is required except with simsam continue, where if prec() is not
+        specified, it is assumed to be the same as in the previous simsam
+        command.  The precision is the half-width of the confidence interval
+        for power, whose level is set by the level() option.  The actual
+        confidence interval is calculated using an exact binomial method, so
+        it will not always match the specified precision exactly.
+
+    power(#) specifies the target for statistical power as a decimal fraction.
+        The default is power(0.9).
+
+    alpha(#) specifies the significance level.  The default is alpha(0.05).
+
+    detect(options) lists the options to subcommand that specify the effect to
+        be detected.
+
+    null(options) lists the options to subcommand that specify the null model.
+
+    assuming(options) lists any other options to subcommand that specify
+        additional assumptions.
+
+    start(#) specifies the starting value for sample size in the iterative
+        algorithm.  The default is start(100).  The algorithm can generally
+        find its way to any required sample size, large or small, from a
+        starting value of 100, but sometimes a judicious choice of starting
+        value will ensure quicker convergence.
+
+    iter(#) specifies the maximum number of iterations.  The default is
+        iter(10), which will be sufficient in many applications.  The largest
+        number that can be specified is iter(99).
+
+    notable suppresses the output table containing results from each
+        iteration.
+
+    pvalue(name) identifies the returned scalar containing the p-value.  The
+        default is pvalue(p), which means that after execution of subcommand,
+        simsam looks for the p-value in r(p).
+
+    level(#) specifies the confidence level for estimates of power.  The
+        default is level(99) to ensure good coverage and to emphasize the
+        distinction from sample-based estimates, which would usually be quoted
+        with 95% confidence.  The level can be set to any integer between 90
+        and 99, but precision will usually be controlled using the prec()
+        option, so level() can be kept at its default.
+
+
+Remarks
+
+    Although the exact power achieved by a given sample size can be estimated
+    for any hypothesis test by using Monte Carlo simulation, using simulation
+    to determine the sample size required to achieve a given power is slightly
+    more complicated, necessitating that power be estimated at different
+    sample sizes to find the one at which the target power is attained.
+    simsam uses an iterative algorithm that is more efficient than stepping
+    consecutively through every possible sample size.  The user controls the
+    precision of the power estimate, though initially the algorithm uses less
+    precision to make more rapid progress.  A certain degree of precision
+    relative to the increment is necessary for simsam to converge reliably on
+    a solution, though this will also depend on what the required sample size
+    turns out to be.  If simsam suspects during its execution that precision
+    is a problem, it will halt and give further advice.
+
+    simsam produces an output table showing the working sample size and the
+    estimate of power at each iteration.  The progress of each iteration is
+    indicated by a series of dots in the output table, with the interval
+    between dots representing one tenth of the time required for the whole
+    iteration.
+
+    In fact, though the term "sample size" is used here, simsam can be used to
+    determine any design parameter that when increased causes the power to
+    increase.  For example, this could be the sample size per group, the
+    duration of recruitment, or the rate of recruitment per unit of time.
+    There is one restriction: simsam will only consider integer values for
+    this parameter.
+
+    If the null() option is specified, then once simsam has determined the
+    required sample size, it estimates the power under the null hypothesis.
+    If the power under the null exceeds the significance, this could indicate
+    that the subcommand program is not working as intended or that the
+    analysis it uses is not appropriate to the data that it generates.
+
+    detect(), null(), and assuming() can all contain lists of options to be
+    passed "as is" to subcommand (the option n_option_name is also passed with
+    the working sample size).  Options in detect() and assuming() are used to
+    determine required sample size, and options in null() and assuming() are
+    used to evaluate power under the null.
+
+
+Remarks on simsam continue
+
+    simsam may halt before a solution has been obtained either because it
+    suspects a problem that might prevent convergence or because it has
+    completed a prespecified number of iterations.  In fact, simsam will cease
+    iterating under one of five exit conditions:
+
+    1. convergence -- the algorithm has reached a solution;
+    2. iteration -- the number of iterations specified in the iter() option
+        has been completed;
+    3. precision -- simsam suspects that given the precision relative to the
+        increment specified, the sample size cannot be reliably determined to
+        within one increment;
+    4. low power -- the estimated power is unexpectedly low (if the power is
+        less than the significance level, this could indicate a problem with
+        subcommand -- in particular, a power of 0 may indicate the program is
+        consistently failing to return a p-value); or
+    5. inflation -- the working sample size is continually increasing, but the
+        power is not being controlled as expected.
+
+    After any of these exit conditions, simsam may be restarted using the
+    simsam continue command.
+
+    Cases 4 and 5 are not considered errors because they could arise
+    legitimately (for example, through sampling variation or poor choice of
+    starting value), but using simsam continue in these cases is unlikely to
+    solve the underlying problem, and the program is liable simply to halt
+    again.  Continuing after simsam has converged, without changing the
+    increment or precision, will just cause the previous result to be output
+    again.
+
+
+Remarks on subcommand
+
+    The program subcommand contains code to generate and analyze a single
+    dataset.  Options to subcommand should include design parameters such as
+    sample size, which can be used to control power.  Essential features of
+    this program are that
+
+    (a) options follow standard syntax, and there are no arguments before the
+        comma;
+    (b) data in memory are cleared before the new dataset is generated; and
+    (c) it is an r-class command, returning the p-value as a scalar.
+
+    Where speed is of the essence, the program should also be as lean as
+    possible.  Requirement (b) also allows subcommand to be used with Stata's
+    simulate command.
+
+    simsam assumes that if the p-value is missing -- for example, if an error
+    was captured during the analysis and a p-value was not returned -- the
+    result is to be considered nonsignificant.  This allows for situations
+    where legitimately arising data cannot be analyzed -- for example, a
+    logistic regression on a contingency table with a zero cell.  Once a new
+    program has been checked for syntax errors, you should routinely capture
+    errors in the analysis part so that they do not halt the progress of
+    simsam.  In particular, capture noisily should be captured so that running
+    subcommand by itself produces noisy output.
+
+    The following example could be used as a subcommand for simsam to
+    calculate sample size for a two-sample t test (though a faster method in
+    this case would be to use Stata's sampsi command).  The program generates
+    normally distributed observations in two independent samples and then
+    applies a t test.  It has required options d() (mean difference), sd()
+    (standard deviation in each group), and npergrp() (sample size per group).
+
+    program define s_ttest, rclass
+            version 12
+            syntax, D(real) SD(real) NPERGRP(integer)
+            drop _all
+            set obs `=2*`npergrp''
+            gen group=mod(_n, 2)
+            gen x=rnormal(`d'*group, `sd')
+            capture noisily ttest x, by(group)
+            return scalar p=r(p)
+    end
+
+
+Examples
+
+    . simsam s_ttest npergrp, inc(10) prec(0.01) power(0.8) alpha(0.05)
+        detect(d(0.5)) null(d(0)) assuming(sd(1.0))
+    . * compare with the result from sampsi
+    . sampsi 0.0 0.5, power(0.8) sd(1.0)
+
+    . simsam s_ttest npergrp, inc(10) prec(0.01) power(0.8) alpha(0.05)
+        detect(d(0.5)) assuming(sd(1.0)) iter(2)
+    . simsam continue, iter(2)
+
+    . simsam s_ttest npergrp, inc(10) prec(0.01) power(0.8) alpha(0.05)
+        detect(d(0.5)) assuming(sd(1.0))
+    . simsam continue, inc(1) prec(0.001)
+
+
+Saved results
+
+    simsam saves the following in r():
+
+    Scalars   
+      r(n)           required sample size
+      r(p)           estimate of power at sample size n
+      r(pl)          lower confidence limit for power
+      r(pu)          upper confidence limit for power
+      r(alpha)       significance level
+      r(power)       target power
+      r(inc)         increment
+      r(prec)        precision
+      r(reps)        number of replications used to estimate power
+      r(tryn)        sample size to try next
+      r(nullp)       estimate of power under null
+      r(nullpl)      lower confidence limit for power under null
+      r(nullpu)      upper confidence limit for power under null
+      r(level)       confidence level for estimates of power
+      r(prec_inc)    precision and increment ratio
+
+    Macros    
+      r(subcomm)     subcommand
+      r(noption)     name of option for sample size
+      r(pvalue)      where p-value is returned by subcommand
+      r(detect)      specification of the effect to be detected
+      r(null)        specification of the null model
+      r(assuming)    additional options
+      r(ntried)      sample sizes tried so far, at full precision
+      r(exitcond)    exit condition
+      r(phase)       phase of algorithm (heuristic or step-down)
+
+
+Author
+
+    Richard Hooper
+    Centre for Primary Care and Public Health
+    Queen Mary, University of London
+    r.l.hooper@qmul.ac.uk
+
+
+Also see
+
+    Article:  Stata Journal, volume 13, number 1
