@@ -1,0 +1,398 @@
+*! simsam v1.1.0 RHooper 09jul2012
+program simsam, rclass
+		version 10.0
+
+		gettoken subcomm 0 : 0, parse(" ,")
+		confirm name `subcomm'
+
+		if "`subcomm'"~="continue" {
+				syntax name(name=noption id="design parameter"),  ///
+					INC(integer) PREC(real)  ///
+					[Power(real 0.9) Alpha(real 0.05)  ///
+					START(integer 100) ITER(integer 10)  ///
+					DETect(string asis) NULL(string asis)  ///
+					ASSUMing(string asis) noTABLE  ///
+					PVALue(name) LEVEL(integer 99)]
+		}
+		else {
+				if "`r(exitcond)'"=="" {
+						di as error "nothing to continue"
+						exit 198
+				}
+				else {
+						syntax , [INC(integer `r(inc)')  ///
+							PREC(real `r(prec)') ITER(int 10)  ///
+							NULL(string asis) noTABLE]
+				}
+				foreach opt in power alpha detect assuming  ///
+					pvalue level noption {
+						local `opt' `r(`opt')'
+				}
+				if "`null'"=="" {
+						local null `r(null)'
+				}
+				local start=r(tryn)
+		}
+
+		if (`power'<=0 | `power'>=1) {
+				di as error "power must be between 0 and 1"
+				exit 198
+		}
+		if (`alpha'<=0 | `alpha'>=1) {
+				di as error "significance must be between 0 and 1"
+				exit 198
+		}
+		if `power'<=`alpha' {
+				di as error "power must exceed significance"
+				exit 198
+		}
+		if `start'<=0 {
+				di as error "starting value must be positive"
+				exit 198
+		}
+		if (`iter'<1 | `iter'>99) {
+				di as error "iterations must be between 1 and 99"
+				exit 198
+		}
+		if `inc'<=0 {
+				di as error "increment must be positive"
+				exit 198
+		}
+		if (`prec'<=0 | `prec'>=1) {
+				di as error "precision must be between 0 and 1"
+				exit 198
+		}
+		if (`prec'>`power' | `prec'>(1-`power')) {
+				di as error "power+/-precision must be between 0 and 1"
+				exit 198
+		}
+		if (`level'<90 | `level'>99) {
+				di as error "level must be between 90 and 99"
+				exit 198
+		}
+
+		preserve
+
+		tempname n p pl pu nullp nullpl nullpu z_l z_a z_p  ///
+			reps maxreps ratio ratio1 ratio2 i count tryp  ///
+			trypl trypu trypa nci ncifac prec_inc
+		
+		// Initialise
+		if "`subcomm'"~="continue" {
+				foreach r in n p pl pu nullp nullpu nullpl {
+						scalar ``r''=.
+				}
+				if "`pvalue'"=="" {
+						local pvalue p
+				}
+				scalar `reps'=10
+				local phase heuristic
+		}
+		else {
+				if `inc'==r(inc) & `prec'==r(prec) {
+						local phase `r(phase)'
+						local ntried `r(ntried)'
+						foreach r in n p pl pu nullp nullpu nullpl {
+								scalar ``r''=r(`r')
+						}
+						if "`r(exitcond)'"=="converged" {
+								local exitcond converged
+								if "`null'"=="`r(null)'" {
+										local null
+								}
+						}
+				}
+				else {
+						local phase heuristic
+						foreach r in n p pl pu nullp nullpu nullpl {
+								scalar ``r''=.
+						}
+				}
+				local subcomm `r(subcomm)'
+				local pvalue `r(pvalue)'
+				scalar `reps'=r(reps)
+		}
+		local tryn=`inc'*ceil(`start'/`inc')
+		scalar `z_l'=invnormal(0.5+`level'/200)
+		scalar `z_a'=invnormal(1-`alpha'/2)
+		scalar `z_p'=invnormal(`power')
+		scalar `maxreps'=max(100,  ///
+			10*(int(`power'*(1-`power')*`z_l'^2/(10*`prec'^2))+1))
+		if `prec'~=r(prec) {
+				scalar `reps'=min(`maxreps',  ///
+					10^int(log(`reps')/log(10)+0.5))
+		}
+		scalar `ratio1'=1
+		scalar `ratio2'=1
+		scalar `ncifac'=(`z_a'+`z_p')^2*  ///
+			(1/(`z_a'+invnormal(`power'-`prec'))^2  ///
+			-1/(`z_a'+invnormal(`power'+`prec'))^2)
+		scalar `i'=1
+		
+		// Start the output table
+		if "`table'"=="" {
+				display as text _n "{hline 54}"		
+				display as text %9s "iteration" " " %8s  ///
+					abbrev("`noption'",8)  ///
+					_skip(13) %6s "power" " ("  ///
+					as result %2.0f `level'  ///
+					as text "% CI)"
+				display as text "{hline 54}"
+		}		
+
+		// Start iterating
+		while "`exitcond'"=="" {
+				scalar `reps'=`reps'*10
+				if `maxreps'/`reps' < sqrt(10) {
+						scalar `reps'=`maxreps'
+				}
+
+				if "`table'"=="" {
+						display as text %9.0f `i' " "  ///
+							as result %8.0f `tryn' as text " ." _c
+				}
+				
+				scalar `count'=0
+				forvalues j=1/10 {
+						forvalues k=1/`=`reps'/10' {
+								capture `subcomm', `detect'  ///
+									`assuming' `noption'(`tryn')
+								if _rc~=0 {
+										if "`table'"=="" {
+												display as text _n  ///
+													"{hline 54}"
+										}
+										display as error "error "  ///
+											"when running command" _n  ///
+											"`subcomm', `detect' "  ///
+											"`assuming' `noption'(`tryn')"
+										exit _rc
+								}
+								scalar `count'=`count'+  ///
+									(r(`pvalue')<`alpha')
+						}
+						if "`table'"=="" {
+								display as text "." _c
+						}
+				}
+				quietly cii `reps' `count', level(`level')
+				scalar `tryp'=r(mean)
+				scalar `trypl'=r(lb)
+				scalar `trypu'=r(ub)
+				if "`table'"=="" {
+						display as result " " %6.4f `tryp' " ("  ///
+							%6.4f `trypl' ", " %6.4f `trypu' ")"
+				}
+
+				if `count'==`reps' {
+						scalar `trypa'=max((`count'-0.5)/`reps',  ///
+							(1+`power')/2)
+				}
+				else {
+						scalar `trypa'=`tryp'
+				}
+				scalar `ratio'= (`z_a'+`z_p')^2/  ///
+					(`z_a'+invnormal(`trypa'))^2
+				scalar `nci'=`tryn'*`ratio'*`ncifac'
+				if `inc'<`nci' & `count'<`reps' {
+						local exitcond precision
+				}
+				
+				if `reps'==`maxreps' {
+						local ntried `ntried' `tryn'
+						if (`tryp'>`power' & `tryn'<`n') {
+								scalar `n'=`tryn'
+								scalar `p'=`tryp'
+								scalar `pl'=`trypl'
+								scalar `pu'=`trypu'
+						}	
+				}
+				
+				if "`phase'"=="heuristic" {
+						if `tryp'<=`alpha'/2 {
+								local exitcond low power
+						}
+						else {
+								local tryn=`inc'*(int(`tryn'/`inc'*   ///
+									`ratio')+1)
+								if `ratio'>2 & `ratio1'>2 & `ratio2'>2 {
+									local exitcond inflation
+								}
+								scalar `ratio2'=`ratio1'
+								scalar `ratio1'=`ratio'
+								local dejavu : list posof "`tryn'"  ///
+									in ntried
+								if `dejavu' {
+										local tryn=`n'
+										scalar `tryp'=`p'
+										local phase step-down
+								}
+						}
+				}
+				
+				if "`phase'"=="step-down" {
+						local tryn=`tryn'-`inc'
+						local dejavu : list posof "`tryn'" in ntried
+						if ((`dejavu' | `tryn'==0 | `tryp'<`power')   ///
+							& "`exitcond'"=="") {
+								local exitcond converged
+						}
+						if "`exitcond'"~="" {
+								local tryn=`n'
+						}
+				}
+				
+				if (`i'==`iter' & "`exitcond'"=="") {
+						local exitcond iteration
+				}
+								
+		// Keep iterating until an exit condition is set
+		scalar `i'=`i'+1
+		}
+		if "`table'"=="" {
+				display as text "{hline 54}"
+		}
+
+		if "`exitcond'"=="iteration" {
+				if `iter'>1 {
+						local s s
+				}
+				display as text _n "Warning: did not converge "  ///
+					"within " `iter' " iteration`s'"
+		}
+		
+		else if "`exitcond'"=="precision" {
+				display as text _n "Warning: `noption' not reliably "  ///
+					"determined to within one increment"
+		}
+
+		else if "`exitcond'"=="low power" {
+				display as text _n "Warning: power is "  ///
+					"unexpectedly low"
+		}
+		
+		else if "`exitcond'"=="inflation" {
+				display as text _n "Warning: `noption' is not "  ///
+					"controlling power as expected"
+		}
+		
+		else {
+				if "`null'"~="" {
+						if "`table'"=="" {
+								display as text %9s "null" " "  ///
+									as result %8.0f `tryn' as text " ." _c
+						}
+		
+						scalar `maxreps'=max(100,   ///
+							10*int(`alpha'*(1-`alpha')*`z_l'^2/   ///
+							(10*`prec'^2))+1)
+						scalar `count'=0
+						forvalues j=1/10 {
+								forvalues k=1/`=`maxreps'/10' {
+										capture `subcomm', `null'  ///
+											`assuming' `noption'(`tryn')
+										if _rc~=0 {
+												if "`table'"=="" {
+														display  ///
+															as text _n  ///
+															"{hline 54}"
+												}
+												display as error  ///
+													"error when "  ///
+													"running "  ///
+													"command" _n  ///
+													"`subcomm', "  ///
+													"`null' "  ///
+													"`assuming' "  ///
+													"`noption'(`tryn')"
+												exit _rc
+										}
+										scalar `count'=`count'+  ///
+											(r(`pvalue')<`alpha')
+								}
+								if "`table'"=="" {
+										display as text "." _c
+								}
+						}
+						quietly cii `maxreps' `count', level(`level')
+						scalar `nullp'=r(mean)
+						scalar `nullpl'=r(lb)
+						scalar `nullpu'=r(ub)
+						if "`table'"=="" {
+								display as result " " %6.4f `nullp'  ///
+									" (" %6.4f `nullpl' ", "  ///
+									%6.4f `nullpu' ")"
+								display as text "{hline 54}"
+						}
+				}
+				
+				display as text _n "  " %12s abbrev("`noption'",12)  ///
+					" = " as result `n'
+				display as text "        achieves "  ///
+					as result %5.2f `=100*`p''  ///
+					as text "% power ("  ///
+					as result %2.0f `level'  ///
+					as text "% CI "  ///
+					as result %5.2f `=100*`pl'' as text ", "  ///
+					as result %5.2f `=100*`pu'' ")"
+				display as text "          at the "  ///
+					as result `=100*`alpha''  ///
+					as text "% significance level"
+				local text to detect
+				foreach word in detect assuming {
+						if "``word''"~="" {
+								display as text %13s "`text'"
+								local copy ``word''
+								while "`copy'"~="" {
+										gettoken token1 copy :  ///
+											copy, parse("( ")
+										gettoken token2 copy :  ///
+											copy, match(bracket)
+										display as text "  " %12s  ///
+											abbrev("`token1'",12) _c
+										if "`bracket'"=="(" {
+												display as text " = "  ///
+													as result "`token2'"
+										}
+										else {
+												local copy `token2' `copy'
+												display
+										}
+								}
+						}
+						local text assuming
+				}
+				if `nullp'~=. {
+						display as text _n `"     under null: "'  ///
+							as result %5.2f `=100*`nullp''  ///
+							as text "% power ("  ///
+							as result %2.0f `level'  ///
+							as text "% CI "  ///
+							as result %5.2f `=100*`nullpl''  ///
+							as text ", "  ///
+							as result %5.2f `=100*`nullpu'' ")"
+				}
+		}
+		
+		if ("`exitcond'"=="precision" | "`exitcond'"=="converged") {
+				scalar `prec_inc'=exp(-(`z_p'^2)/2)*(`z_a'+`z_p')/  ///
+					(4*sqrt(2*_pi)*`tryn')
+				display as text _n "If continuing, use prec/inc <"  ///
+					as result %8.1e `prec_inc'
+		}
+		else {
+				scalar `prec_inc'=.
+		}
+
+		foreach r in phase exitcond ntried assuming null  ///
+			detect pvalue noption subcomm {
+				return local `r' ``r''
+		}
+		foreach r in prec_inc level nullpu nullpl nullp tryn reps  ///
+			prec inc power alpha pu pl p n {
+				return scalar `r'=``r''
+		}
+
+		restore
+
+end
